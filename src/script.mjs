@@ -1,4 +1,4 @@
-import { getBaseUrl } from '@sgnl-actions/utils';
+import { getBaseURL, resolveJSONPathTemplates} from '@sgnl-actions/utils';
 
 class RetryableError extends Error {
   constructor(message) {
@@ -176,10 +176,18 @@ export default {
   invoke: async (params, context) => {
     console.log('Starting HashiCorp Boundary Remove User from Group action');
 
-    try {
-      validateInputs(params);
+    const jobContext = context.data || {};
 
-      const { groupId, userId, authMethodId } = params;
+    // Resolve JSONPath templates in params
+    const { result: resolvedParams, errors } = resolveJSONPathTemplates(params, jobContext);
+    if (errors.length > 0) {
+     console.warn('Template resolution errors:', errors);
+    }
+
+    try {
+      validateInputs(resolvedParams);
+
+      const { groupId, userId, authMethodId } = resolvedParams;
 
       console.log(`Processing group ID: ${groupId}, user ID: ${userId}`);
 
@@ -188,7 +196,7 @@ export default {
       }
 
       // Get base URL using utility function
-      const baseUrl = getBaseUrl(params, context);
+      const baseUrl = getBaseURL(resolvedParams, context);
 
       // Step 1: Authenticate to get a token
       console.log(`Authenticating with auth method: ${authMethodId}`);
