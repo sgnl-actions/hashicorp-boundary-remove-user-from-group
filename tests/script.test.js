@@ -164,7 +164,7 @@ describe('HashiCorp Boundary Remove User from Group Script', () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ version: 1 })
+            json: async () => ({ version: 1, member_ids: ['u_1234567890'] })
           };
         }
 
@@ -182,6 +182,110 @@ describe('HashiCorp Boundary Remove User from Group Script', () => {
       for (const req of capturedRequests) {
         expect(req.options.headers['User-Agent']).toBe(SGNL_USER_AGENT);
       }
+    });
+
+    test('should skip remove and return userRemoved=false when user is not a member', async () => {
+      const params = {
+        groupId: 'g_1234567890',
+        userId: 'u_1234567890',
+        authMethodId: 'ampw_1234567890'
+      };
+
+      let removeMemberCalled = false;
+      global.fetch = async (url, options) => {
+        if (url.includes(':authenticate')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ attributes: { token: 'mock-token' } })
+          };
+        }
+
+        if (url.includes('/v1/groups/') && options.method === 'GET') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ version: 1, member_ids: [] })
+          };
+        }
+
+        removeMemberCalled = true;
+        return { ok: true, status: 200, json: async () => ({}) };
+      };
+
+      const result = await script.invoke(params, mockContext);
+
+      expect(removeMemberCalled).toBe(false);
+      expect(result.userRemoved).toBe(false);
+      expect(result.groupId).toBe('g_1234567890');
+      expect(result.userId).toBe('u_1234567890');
+    });
+
+    test('should remove user and return userRemoved=true when user is a member', async () => {
+      const params = {
+        groupId: 'g_1234567890',
+        userId: 'u_1234567890',
+        authMethodId: 'ampw_1234567890'
+      };
+
+      global.fetch = async (url, options) => {
+        if (url.includes(':authenticate')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ attributes: { token: 'mock-token' } })
+          };
+        }
+
+        if (url.includes('/v1/groups/') && options.method === 'GET') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ version: 2, member_ids: ['u_1234567890', 'u_other0000001'] })
+          };
+        }
+
+        return { ok: true, status: 200, json: async () => ({}) };
+      };
+
+      const result = await script.invoke(params, mockContext);
+
+      expect(result.userRemoved).toBe(true);
+      expect(result.groupId).toBe('g_1234567890');
+      expect(result.userId).toBe('u_1234567890');
+      expect(result.removedAt).toBeDefined();
+    });
+
+    test('should skip remove and return userRemoved=false when group has no member_ids field', async () => {
+      const params = {
+        groupId: 'g_1234567890',
+        userId: 'u_1234567890',
+        authMethodId: 'ampw_1234567890'
+      };
+
+      global.fetch = async (url, options) => {
+        if (url.includes(':authenticate')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ attributes: { token: 'mock-token' } })
+          };
+        }
+
+        if (url.includes('/v1/groups/') && options.method === 'GET') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ version: 1 })
+          };
+        }
+
+        return { ok: true, status: 200, json: async () => ({}) };
+      };
+
+      const result = await script.invoke(params, mockContext);
+
+      expect(result.userRemoved).toBe(false);
     });
 
     // Note: Testing actual Boundary API calls would require mocking fetch
