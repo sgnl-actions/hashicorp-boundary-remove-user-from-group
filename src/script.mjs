@@ -176,7 +176,8 @@ export default {
    * @param {string} context.secrets.BASIC_PASSWORD - Password for HashiCorp Boundary authentication
    * @param {string} context.environment.ADDRESS - Default HashiCorp Boundary API base URL
    *
-   * @returns {Object} Job results
+   * @returns {Object} Job results. userRemoved is false if the user was not
+   *   a member of the group (idempotent no-op); removedAt is always set.
    */
   invoke: async (params, context) => {
     console.log('Starting HashiCorp Boundary Remove User from Group action');

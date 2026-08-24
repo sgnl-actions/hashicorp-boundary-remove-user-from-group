@@ -45,8 +45,8 @@ This SGNL action integrates with HashiCorp Boundary to remove users from groups.
 | `groupId` | string | The group ID that was processed |
 | `userId` | string | The user ID that was removed |
 | `authMethodId` | string | The auth method ID used for authentication |
-| `userRemoved` | boolean | Whether the user was successfully removed from group |
-| `removedAt` | datetime | When the operation completed (ISO 8601) |
+| `userRemoved` | boolean | `true` if the user was removed; `false` if the user was not a member (no mutation performed) |
+| `removedAt` | datetime | When the action ran (ISO 8601). Always set; check `userRemoved` to determine if membership changed |
 
 ## Usage Example
 
@@ -74,6 +74,8 @@ This SGNL action integrates with HashiCorp Boundary to remove users from groups.
 
 ### Successful Response
 
+User was removed:
+
 ```json
 {
   "groupId": "g_1234567890",
@@ -84,13 +86,26 @@ This SGNL action integrates with HashiCorp Boundary to remove users from groups.
 }
 ```
 
+User was not a member (no mutation performed):
+
+```json
+{
+  "groupId": "g_1234567890",
+  "userId": "u_0987654321",
+  "authMethodId": "ampw_1234567890",
+  "userRemoved": false,
+  "removedAt": "2024-01-15T10:30:00Z"
+}
+```
+
 ## How It Works
 
 The action performs the following steps:
 
 1. **Authenticate**: Uses the provided auth method ID and credentials to obtain an authentication token from Boundary
-2. **Get Group Details**: Retrieves the current group information including its version number (required for updates)
-3. **Remove User from Group**: Removes the specified user from the group using the version number to ensure consistency
+2. **Get Group Details**: Retrieves the current group information including its version number and current member list
+3. **Check membership**: If the user is not a member, returns immediately with `userRemoved: false` without mutating state
+4. **Remove User from Group**: If the user is a member, removes them using the version number to ensure consistency
 
 ## Error Handling
 
@@ -98,13 +113,13 @@ The action includes comprehensive error handling with retryable and fatal error 
 
 ### Retryable Errors (Framework will retry)
 - **429 Rate Limit**: Boundary API rate limit exceeded
+- **409 Conflict**: Version mismatch from a concurrent change on the `:remove-members` call. Note: this should be rare in practice since the action checks membership before mutating, but can still occur if the group changed between the read and the write
 - **5xx Server Errors**: Boundary API server errors
 
 ### Fatal Errors (Will not retry)
 - **401 Unauthorized**: Invalid username or password
 - **403 Forbidden**: Insufficient permissions
 - **404 Not Found**: Group or user not found
-- **409 Conflict**: User may not be in group or version mismatch
 - **Missing Parameters**: Invalid or missing required parameters
 
 ## Development
@@ -192,8 +207,8 @@ This action uses the following HashiCorp Boundary API endpoints:
    - Check that both resources exist in Boundary
 
 8. **Conflict Error (409)**
-   - The user may not be a member of the group
-   - There may be a version mismatch - the action will handle retries automatically
+   - Version mismatch caused by a concurrent change to the group
+   - The action will handle retries automatically by re-fetching group state
 
 ## License
 
