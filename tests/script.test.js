@@ -219,6 +219,7 @@ describe('HashiCorp Boundary Remove User from Group Script', () => {
       expect(result.userRemoved).toBe(false);
       expect(result.groupId).toBe('g_1234567890');
       expect(result.userId).toBe('u_1234567890');
+      expect(result.removedAt).toBeDefined();
     });
 
     test('should remove user and return userRemoved=true when user is a member', async () => {

@@ -218,7 +218,8 @@ export default {
           groupId,
           userId,
           authMethodId,
-          userRemoved: false
+          userRemoved: false,
+          removedAt: new Date().toISOString()
         };
       }
 
