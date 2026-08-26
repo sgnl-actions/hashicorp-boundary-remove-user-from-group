@@ -52,11 +52,11 @@ outputs:
 
   userRemoved:
     type: boolean
-    description: Whether the user was successfully removed from group
+    description: Whether the user was removed from the group. False if the user was not a member (no mutation performed).
 
   removedAt:
     type: datetime
-    description: When the operation completed (ISO 8601)
+    description: When the action ran (ISO 8601). Set regardless of whether a mutation occurred; check userRemoved to determine if the group membership changed.
 
 # Required secrets (configured at deployment time)
 secrets:

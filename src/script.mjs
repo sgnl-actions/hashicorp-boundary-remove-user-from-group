@@ -112,7 +112,7 @@ async function getGroup(groupId, token, baseUrl) {
     throw new FatalError('No version returned from group');
   }
 
-  return data.version;
+  return { version: data.version, memberIds: data.member_ids || [] };
 }
 
 async function removeUserFromGroup(groupId, userId, version, token, baseUrl) {
@@ -147,8 +147,10 @@ async function removeUserFromGroup(groupId, userId, version, token, baseUrl) {
     }
 
     if (response.status === 409) {
-      // Conflict - user may not be in group or version mismatch
-      throw new FatalError(`Conflict (user may not be in group): ${responseText}`);
+      // Conflict - most likely a version mismatch from a concurrent change,
+      // possibly because the user was already removed by a prior run of this
+      // action. Let the caller re-fetch the group and decide.
+      throw new RetryableError(`Conflict while removing user from group (version mismatch or not a member): ${responseText}`);
     }
 
     if (response.status >= 500) {
@@ -174,7 +176,8 @@ export default {
    * @param {string} context.secrets.BASIC_PASSWORD - Password for HashiCorp Boundary authentication
    * @param {string} context.environment.ADDRESS - Default HashiCorp Boundary API base URL
    *
-   * @returns {Object} Job results
+   * @returns {Object} Job results. userRemoved is false if the user was not
+   *   a member of the group (idempotent no-op); removedAt is always set.
    */
   invoke: async (params, context) => {
     console.log('Starting HashiCorp Boundary Remove User from Group action');
@@ -205,9 +208,21 @@ export default {
       // Add small delay between operations
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Step 2: Get group details to retrieve version
+      // Step 2: Get group details to retrieve version and current members
       console.log(`Getting group details for: ${groupId}`);
-      const version = await getGroup(groupId, token, baseUrl);
+      const { version, memberIds } = await getGroup(groupId, token, baseUrl);
+
+      // Idempotency: if the user is not a member, return success without mutating
+      if (!memberIds.includes(userId)) {
+        console.log(`User ${userId} is not a member of group ${groupId}, skipping remove`);
+        return {
+          groupId,
+          userId,
+          authMethodId,
+          userRemoved: false,
+          removedAt: new Date().toISOString()
+        };
+      }
 
       // Add small delay between operations
       await new Promise(resolve => setTimeout(resolve, 100));
